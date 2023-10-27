@@ -1,0 +1,9 @@
+emailjango:
+  containers:
+    image: registry.gitlab.com/stenlywolf/optimal_city_test:latest
+
+postgres:
+  resources:
+    storage: 5Gi
+  containers:
+    image: postgres:10.4

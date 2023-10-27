@@ -1,0 +1,94 @@
+stages:
+  - test
+  - build
+  - deploy dev
+  - deploy prod
+
+
+jango tests:
+  image: python:latest
+  stage: test
+  script:
+    - pip install -r app/requirements.txt
+    - python app/manage.py test --noinput
+  tags:
+    - docker
+
+
+build image:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:                         # для dind - без этого не будет доступа к сокету docker для dind
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker login -u gitlab-ci-token -p ${CI_JOB_TOKEN} ${CI_REGISTRY}
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} .
+    - docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:latest
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+    - docker push ${CI_REGISTRY_IMAGE}:latest
+  only:
+    - master
+  tags:
+    - docker
+
+
+#==================  Деплой без helm cart  ====================
+
+# deploy dev:
+#   stage: deploy dev
+#   image: stenlywolf/kubectl:latest      # собственный образ, без entrypoint
+#   before_script:
+#     - export KUBECONFIG=$KUBE_CONFIG_DEV
+#     - apt install gettext-base
+#   script:
+#     - envsubst < _k8s-manifests/emailapp.yaml | kubectl apply -f - -n dev
+#   tags:
+#     - docker
+
+
+deploy dev:
+  stage: deploy dev
+  image: stenlywolf/helm:latest    # собственный образ, без entrypoint
+  variables:
+    MICROSERVICE: ""
+  before_script:
+    - chmod 600 $KUBE_CONFIG_DEV
+    - export KUBECONFIG=$KUBE_CONFIG_DEV   # Конфиг для доступа к кластеру, права только на обновление образа
+  script:
+    - > 
+      helm upgrade emailjango _helm-chart/
+      --install
+      --namespace dev
+      --set $MICROSERVICE.containers.image=${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+      --reuse-values
+  only:
+    - master
+  tags:
+    - docker
+
+
+
+deploy prod:
+  stage: deploy prod
+  image: stenlywolf/helm:latest
+  variables:
+    MICROSERVICE: ""
+  before_script:
+    - chmod 600 $KUBE_CONFIG_PROD
+    - export IMAGE_NAME=$CI_REGISTRY_IMAGE/$MICROSERVICE
+    - export KUBECONFIG=$KUBE_CONFIG_PROD      # Конфиг для доступа к кластеру prod окружения, права только на обновление образа    
+  script:
+    - > 
+      helm upgrade emailjango _helm-chart/
+      --install
+      --namespace prod
+      --set emailjango.containers.image=${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+      --reuse-values
+  only:
+    - master
+  when: manual    # Ручное подтверждение для деплоя в прод
+  tags:
+    - docker

@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+  # Django
+  web:
+    image: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+    container_name: email-django-app
+    environment:
+      - ALLOWED_HOST=${ALLOWED_HOST}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_HOST_USER=YourEmail@address
+      - EMAIL_HOST_PASSWORD=YourAppPassword
+      - RECIPIENT_ADDRESS=TheRecieverOfTheMails
+    ports:
+      - "8000:8000" 
+    depends_on:
+      - db             # Ожидаем db
+
+  # PostgreSQL
+  db:
+    image: postgres:latest
+    container_name: db
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data          # Монтируем volume для базы PostgreSQL
+
+volumes:
+  postgres_data:

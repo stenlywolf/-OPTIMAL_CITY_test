@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emailapp
+spec:
+  selector:
+    matchLabels:
+      app: emailapp
+  template:
+    metadata:
+      labels:
+        app: emailapp
+    spec:
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      imagePullSecrets:
+      - name: registry-key   # Для подключения к Giltab Registry
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ALLOWED_HOST
+          value: ${ALLOWED_HOST}
+        - name: POSTGRES_DB
+          value: ${POSTGRES_DB}
+        - name: POSTGRES_USER
+          value: ${POSTGRES_USER}
+        - name: POSTGRES_PASSWORD
+          value: ${POSTGRES_PASSWORD}
+        - name: DB_HOST
+          value: db
+        - name: DB_PORT
+          value: 5432
+        - name: EMAIL_HOST
+          value: ${EMAIL_HOST}
+        - name: EMAIL_HOST_USER
+          value: ${EMAIL_HOST_USER}
+        - name: EMAIL_HOST_PASSWORD
+          value: ${EMAIL_HOST_PASSWORD}
+        - name: RECIPIENT_ADDRESS
+          value: ${RECIPIENT_ADDRESS}
+        resources:
+          requests:
+            cpu: 200m
+            memory: 180Mi
+          limits:
+            cpu: 300m
+            memory: 300Mi
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          grpc:
+            port: 8000
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          grpc:
+            port: 8000
+        
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emailapp
+spec:
+  type: ClusterIP
+  selector:
+    app: emailapp
+  ports:
+  - name: app
+    port: 8000
+    targetPort: 8000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emailjango-external
+spec:
+  selector:
+    app: emailjango
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
